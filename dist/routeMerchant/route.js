@@ -15,6 +15,7 @@ const payoutController_1 = __importDefault(require("../ControllerMerchant/payout
 const refund_1 = __importDefault(require("../ControllerMerchant/refund"));
 const reportsController_1 = __importDefault(require("../ControllerMerchant/reportsController"));
 const settlementController_1 = __importDefault(require("../ControllerMerchant/settlementController"));
+const singlePayout_1 = __importDefault(require("../ControllerMerchant/singlePayout"));
 const router = express_1.default.Router();
 const uploads = (0, multer_1.default)(); // for parsing multipart/form-data
 router.post('/register', uploads.none(), loginController_1.default.register);
@@ -77,4 +78,15 @@ router.post('/internationalSettlement', uploads.none(), authMiddleware_1.default
 router.post('/internationalrequestSettlement', uploads.none(), authMiddleware_1.default, settlementController_1.default.requestSettlement);
 router.post('/internationalcardDetails', uploads.none(), authMiddleware_1.default, settlementController_1.default.cardDetails);
 router.post('/internationaldownloadReportsc', uploads.none(), authMiddleware_1.default, settlementController_1.default.downloadReportsc);
+//                 👇👇 Domestic Settlement 👇👇
+router.post('/localsettlement_Trans', uploads.none(), authMiddleware_1.default, settlementController_1.default.settlement_Trans);
+router.post('/localrequestSettlement', uploads.none(), authMiddleware_1.default, settlementController_1.default.localrequestSettlement);
+router.post('/localcardDetails', uploads.none(), authMiddleware_1.default, settlementController_1.default.localcardDetails);
+router.post('/localdownloadReportsc', uploads.none(), authMiddleware_1.default, settlementController_1.default.localdownloadReportsc);
+router.post('/exchangeRate', uploads.none(), authMiddleware_1.default, settlementController_1.default.exchangeRate);
+router.post('/userWallet', uploads.none(), authMiddleware_1.default, settlementController_1.default.userWallet);
+//                  👇👇 Single Payout 👇👇
+router.post('/singlePayoutCurrency', uploads.none(), authMiddleware_1.default, singlePayout_1.default.singlePayoutCurrency);
+router.post('/singlePayoutBankcodes', uploads.none(), authMiddleware_1.default, singlePayout_1.default.singlePayoutBankcodes);
+router.post('/singlePayoutPayment', uploads.none(), authMiddleware_1.default, singlePayout_1.default.singlePayoutPayment);
 exports.default = router;

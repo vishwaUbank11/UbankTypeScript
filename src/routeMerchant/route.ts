@@ -10,7 +10,8 @@ import DepositTransaction from '../ControllerMerchant/deposits_controller';
 import PayoutTransaction from '../ControllerMerchant/payoutController';
 import Refund from '../ControllerMerchant/refund';
 import MerchantReports from '../ControllerMerchant/reportsController';
-import SettlementTransaction from '../ControllerMerchant/settlementController'
+import SettlementTransaction from '../ControllerMerchant/settlementController';
+import singlePayoutTransaction from '../ControllerMerchant/singlePayout'
 
 const router = express.Router();
 const uploads = multer(); // for parsing multipart/form-data
@@ -82,6 +83,21 @@ router.post('/internationalSettlement',uploads.none(),authMiddleware,SettlementT
 router.post('/internationalrequestSettlement',uploads.none(),authMiddleware,SettlementTransaction.requestSettlement);
 router.post('/internationalcardDetails',uploads.none(),authMiddleware,SettlementTransaction.cardDetails);
 router.post('/internationaldownloadReportsc',uploads.none(),authMiddleware,SettlementTransaction.downloadReportsc);
+//                 👇👇 Domestic Settlement 👇👇
+router.post('/localsettlement_Trans',uploads.none(),authMiddleware,SettlementTransaction.settlement_Trans);
+router.post('/localrequestSettlement',uploads.none(),authMiddleware,SettlementTransaction.localrequestSettlement);
+router.post('/localcardDetails',uploads.none(),authMiddleware,SettlementTransaction.localcardDetails);
+router.post('/localdownloadReportsc',uploads.none(),authMiddleware,SettlementTransaction.localdownloadReportsc);
+router.post('/exchangeRate',uploads.none(),authMiddleware,SettlementTransaction.exchangeRate);
+router.post('/userWallet',uploads.none(),authMiddleware,SettlementTransaction.userWallet);
+
+//                  👇👇 Single Payout 👇👇
+router.post('/singlePayoutCurrency',uploads.none(),authMiddleware,singlePayoutTransaction.singlePayoutCurrency);
+router.post('/singlePayoutBankcodes',uploads.none(),authMiddleware,singlePayoutTransaction.singlePayoutBankcodes);
+router.post('/singlePayoutPayment',uploads.none(),authMiddleware,singlePayoutTransaction.singlePayoutPayment);
+
+
+
 
 
 

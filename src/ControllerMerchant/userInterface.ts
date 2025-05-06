@@ -12,7 +12,8 @@ export interface User {
     account_type: number;
     mode_of_solution?: string;
     refund?: number;
-    // aur fields add kar sakte ho
+    secretkey?: string;
+  
   }
   
   import { Request } from 'express';
