@@ -11,7 +11,9 @@ import PayoutTransaction from '../ControllerMerchant/payoutController';
 import Refund from '../ControllerMerchant/refund';
 import MerchantReports from '../ControllerMerchant/reportsController';
 import SettlementTransaction from '../ControllerMerchant/settlementController';
-import singlePayoutTransaction from '../ControllerMerchant/singlePayout'
+import singlePayoutTransaction from '../ControllerMerchant/singlePayout';
+import TransactionStatement from '../ControllerMerchant/statementController';
+import SubMerchant from '../ControllerMerchant/subMerchant';
 
 const router = express.Router();
 const uploads = multer(); // for parsing multipart/form-data
@@ -95,6 +97,15 @@ router.post('/userWallet',uploads.none(),authMiddleware,SettlementTransaction.us
 router.post('/singlePayoutCurrency',uploads.none(),authMiddleware,singlePayoutTransaction.singlePayoutCurrency);
 router.post('/singlePayoutBankcodes',uploads.none(),authMiddleware,singlePayoutTransaction.singlePayoutBankcodes);
 router.post('/singlePayoutPayment',uploads.none(),authMiddleware,singlePayoutTransaction.singlePayoutPayment);
+
+//                  👇👇 Statement 👇👇
+router.post('/statement',uploads.none(),authMiddleware,TransactionStatement.statement);
+router.post('/merchantStatement',uploads.none(),authMiddleware,TransactionStatement.merchantStatement);
+
+//                  👇👇 Sub Merchant 👇👇
+router.post('/SubMerchant',uploads.none(),authMiddleware,SubMerchant.subMerchant);
+router.post('/getIdSubmerchant',uploads.none(),authMiddleware,SubMerchant.getIdSubmerchant);
+router.post('/createMerchant',uploads.none(),authMiddleware,SubMerchant.createMerchant);
 
 
 

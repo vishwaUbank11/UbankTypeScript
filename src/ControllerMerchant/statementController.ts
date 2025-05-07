@@ -2,6 +2,86 @@ import { Request, Response } from 'express';
 import mysqlcon from "../config/db_connection";
 import { AuthenticatedRequest } from './userInterface';
 
+
+interface SolutionApply {
+    userCountry: string;
+  }
+  
+  interface Currency {
+    currency: string;
+  }
+  
+  interface CurrencyRate {
+    Rate: number;
+    depositCurrency: string;
+  }
+  
+  interface ResultDetails {
+    name: string;
+    email: string;
+    id: number;
+  }
+  
+  interface ResultDeposit {
+    deposit: number;
+  }
+  
+  interface ResultPayout {
+    payout: number;
+  }
+  
+  interface ResultSettlement {
+    settlement: number;
+  }
+  
+  interface ResultDepositsPayoutSettlement {
+    depositSum: number;
+    refundsAmount: number;
+    refundFees: number;
+    chargebackAmount: number;
+    chargebackFees: number;
+    accountFees: number;
+    depositCommissions: number;
+    anyotherCharges: number;
+    payouts: number;
+    payoutCommissions: number;
+    bankaccountCharges: number;
+    settlements: number;
+    settlementCharges: number;
+    netSettlement: number;
+  }
+  
+  interface ResultCommissionCharges {
+    commissions: number;
+    ubankconnectDepositsCharges: number;
+    ubankconnectRefundCharges: number;
+    ubankconnectChargebackCharges: number;
+    ubankconnectPayoutCharges: number;
+    ubankconnectOtherCharges: number;
+    bankCharges: number;
+    tax: number;
+  }
+  
+  interface CurrencyData {
+    currency: string;
+    Amount: number;
+    charges: number;
+    NetAmount: number;
+    Settlement_Amount: number;
+  }
+  
+  interface CommissionChargesCurrency {
+    currency: string;
+    DepositAmount: number;
+    DepositCharges: number;
+    PayoutAmount: number;
+    PayoutCharges: number;
+    SettlementAmount: number;
+    SettlementCharges: number;
+    OtherCharges: number;
+    TotalAmount: number;
+  }
+
 interface UserData {
     country: string;
     currency: string;
@@ -58,7 +138,308 @@ interface SettlementSummary {
 
 const TransactionStatement = {
     statement: async(req: AuthenticatedRequest, res: Response):Promise<void> =>{
+        let user = req.user!;
+        const ID = user.account_type === 3 ? user.parent_id! : user.id;
+        let { id, month, year } = req.body;
+        const sqlSolutionApply = "SELECT solution_apply_for_country AS userCountry FROM `tbl_user` WHERE id = ?";
+        const resultSolutionApply: SolutionApply[] = await mysqlcon(sqlSolutionApply, [ID]);
+        let usersCountry: string[] = [];
+        for (let i = 0; i < resultSolutionApply.length; i++) {
+            let usersCountryData = resultSolutionApply[i].userCountry;
+            let dataArray = usersCountryData.split(",").map((item) => item.trim());
+            usersCountry = usersCountry.concat(dataArray);
+        }
+        const sqlCurrency = "SELECT sortname AS currency FROM `countries` WHERE id IN(?) AND status = 1";
+        const resultCurrency: Currency[] = await mysqlcon(sqlCurrency, [usersCountry]);
+        const curr: string[] = resultCurrency.map((item) => item.currency);
+        const sqlCurrencyRate = "SELECT rate AS Rate, deposit_currency AS depositCurrency FROM `tbl_settled_currency` WHERE deposit_currency IN (?)";
+        const resultCurrencyRate: CurrencyRate[] = await mysqlcon(sqlCurrencyRate, [curr]);
+        let rate: number[] = [];
+        for (let i = 0; i < curr.length; i++) {
+            for (let j = 0; j < resultCurrencyRate.length; j++) {
+                if (resultCurrencyRate[j].depositCurrency === curr[i]) {
+                    rate.push(resultCurrencyRate[j].Rate);
+                    break;
+                }
+            }
+        }
+        let now = new Date();
+        function set_time(year: number, month: number): Date {
+            now.setUTCFullYear(year);
+            now.setUTCMonth(month - 1);
+            now.setDate(1);
+            now.setUTCHours(0);
+            now.setUTCMinutes(0);
+            now.setUTCSeconds(1);
+            return now;
+        }
+        try {
+            const now_time = set_time(year, month);
+            let months: string = '';
+            const monthsMap: { [key: number]: string } = {1: "JANUARY", 2: "FEBRUARY", 3: "MARCH", 4: "APRIL", 5: "MAY", 6: "JUNE", 7: "JULY", 8: "AUGUST", 9: "SEPTEMBER", 10: "OCTOBER", 11: "NOVEMBER", 12: "DECEMBER"};
+            months = monthsMap[month];
+            if (id) {
+                const sqlDetails = "SELECT name, email, id FROM tbl_user WHERE id IN(?)";
+                const resultDetails =  await mysqlcon(sqlDetails, [id]);
+                const sqlDeposit = "SELECT SUM(ammount) as deposit FROM tbl_merchant_transaction WHERE status=1 AND created_on <= ?";
+                const resultDeposite: ResultDeposit[] = await mysqlcon(sqlDeposit, [now_time]);
+                const sqlPayout = "SELECT SUM(amount) as payout FROM tbl_icici_payout_transaction_response_details WHERE status='SUCCESS' AND created_on <= ?";
+                const resultPayout: ResultPayout[] = await mysqlcon(sqlPayout, [now_time]);
+                const sqlSettlement = "SELECT SUM(requestedAmount) as settlement FROM tbl_settlement WHERE status=1 AND created_on <= ?";
+                const resultSettlement: ResultSettlement[] = await mysqlcon(sqlSettlement, [now_time]);
+                
+                const sqlDepositsPayoutSettlement = "SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as depositSum, (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as refundsAmount, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as refundFees, (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as chargebackAmount, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as chargebackFees, 0 as accountFees, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0)+ COALESCE(SUM(our_bank_charge_gst),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as depositCommissions, 0 as anyotherCharges, (SELECT COALESCE(SUM(amount),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as payouts, (SELECT COALESCE(SUM(gst_amount),0)+ COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as payoutCommissions, (SELECT COALESCE(SUM(akonto_charge),0)+ COALESCE(SUM(bank_charges),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as bankaccountCharges,  (SELECT COALESCE(SUM(requestedAmount),0) FROM tbl_settlement WHERE user_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as settlements, (SELECT COALESCE(SUM(totalCharges),0) FROM tbl_settlement WHERE user_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as settlementCharges, (SELECT COALESCE(SUM(settlementAmount),0) FROM tbl_settlement WHERE user_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as netSettlement,0 as anyotherCharges";
+                const result1: ResultDepositsPayoutSettlement[] = await mysqlcon(sqlDepositsPayoutSettlement, [
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                ]);
+                const sqlCommissionCharges = "SELECT x.depositCharge+x.chargebackFee+x.refundFee+x.payoutCharge+x.settlementCharge as commissions ,x.ubankconnectDepositsCharges,x.ubankconnectRefundCharges,x.ubankconnectChargebackCharges,x.ubankconnectPayoutCharges,x.ubankconnectOtherCharges,x.bankCharges,x.tax FROM (SELECT (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?)  AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as depositCharge, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?)  AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as chargebackFee,(SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as refundFee,(SELECT COALESCE(SUM(bank_charges),0)+COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as payoutCharge,(SELECT COALESCE(SUM(charges),0) FROM tbl_settlement WHERE user_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as settlementCharge,(SELECT COALESCE(SUM(our_bank_charge),0) FROM tbl_merchant_transaction WHERE user_id IN(?)  AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectDepositsCharges, (SELECT COALESCE(SUM(our_bank_charge),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectRefundCharges, (SELECT COALESCE(SUM(our_bank_charge),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectChargebackCharges, (SELECT COALESCE(SUM(bank_charges),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectPayoutCharges, 0 as ubankconnectOtherCharges, 0 as bankCharges, 0 as tax) as x";
+                const result4: ResultCommissionCharges[] = await mysqlcon(sqlCommissionCharges, [
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                    id,
+                    month,
+                    year,
+                ]);
 
+                const beginningBalance = resultDeposite[0].deposit - (resultPayout[0].payout + resultSettlement[0].settlement);
+                const add1 = result1[0].payouts + result1[0].settlements + result4[0].commissions - result1[0].depositSum;
+                const dbc: CurrencyData[] = [];
+                const rbc: CurrencyData[] = [];
+                const cbc: CurrencyData[] = [];
+                const pbc: CurrencyData[] = [];
+                const sbc: CurrencyData[] = [];
+                const ccc: CommissionChargesCurrency[] = [];
+                for (let i = 0; i < curr.length; i++) {
+                    const paramsCommon = [curr[i], rate[i], id, curr[i], month, year];
+                    const sqlDepositCurrency = "SELECT ? as currency, x.Amount, x.charges, x.Amount - x.charges as NetAmount, (x.Amount - x.charges)/(SELECT ? as rate) AS Settlement_Amount FROM ( SELECT (SELECT COALESCE(SUM(ammount), 0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount, (SELECT COALESCE(SUM(tax_amt), 0) + COALESCE(SUM(payin_charges), 0) + COALESCE(SUM(rolling_reverse_amount), 0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges ) as x"; 
+                    const sqlRefundCurrency = "SELECT ? as currency,x.Amount,x.charges,x.Amount-x.charges as NetAmount, (x.Amount - x.charges) /(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount,(SELECT COALESCE(SUM(tax_amt),0)+ COALESCE(SUM(payin_charges),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlChargebackCurrency = "SELECT ? as currency,x.Amount,x.charges,x.Amount-x.charges as NetAmount, (x.Amount - x.charges) /(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount,(SELECT COALESCE(SUM(tax_amt),0)+ COALESCE(SUM(payin_charges),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlPayoutCurrency = "SELECT ? as currency,x.Amount, x.charges,x.Amount-x.charges as NetAmount, (x.Amount-x.charges)/(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(amount),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount,(SELECT COALESCE(SUM(bank_charges),0)+ COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlSettlementCurrency = "SELECT ? as currency,x.Amount,x.charges,x.Amount-x.charges as NetAmount,(x.Amount-x.charges)/(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(requestedAmount),0) FROM tbl_settlement WHERE user_id IN(?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount, (SELECT COALESCE(SUM(charges),0) FROM tbl_settlement WHERE user_id IN(?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlCommissionChargesCurrency = "SELECT ? as currency,x.DepositAmount,x.DepositCharges,x.PayoutAmount,x.PayoutCharges,x.SettlementAmount,x.SettlementCharges,x.OtherCharges, ((x.DepositAmount-x.DepositCharges)-((x.PayoutAmount-x.PayoutCharges)+(x.SettlementAmount-x.SettlementCharges)))/(SELECT ? as rate) as TotalAmount FROM (SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as DepositAmount, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id IN(?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as DepositCharges, (SELECT COALESCE(SUM(amount),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as PayoutAmount, (SELECT COALESCE(SUM(bank_charges),0)+COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as PayoutCharges, (SELECT COALESCE(SUM(requestedAmount),0) FROM tbl_settlement WHERE user_id IN(?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as SettlementAmount, (SELECT COALESCE(SUM(charges),0) FROM tbl_settlement WHERE user_id IN(?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as SettlementCharges, 0 as OtherCharges) as x";
+                    const resultDepositCurrency = await mysqlcon(sqlDepositCurrency, [...paramsCommon,id, curr[i], month, year,]) as CurrencyData[];
+                    const resultRefundCurrency = await mysqlcon(sqlRefundCurrency, [...paramsCommon,id, curr[i], month, year,id, curr[i], month, year,]) as CurrencyData[];
+                    const resultChargebackCurrency = await mysqlcon(sqlChargebackCurrency, [...paramsCommon,id, curr[i], month, year, id, curr[i], month, year,]) as CurrencyData[];
+                    const resultPayoutCurrency = await mysqlcon(sqlPayoutCurrency, [curr[i], rate[i],id, curr[i], month, year, id, curr[i], month, year,]) as CurrencyData[];
+                    const resultSettlementCurrency = await mysqlcon(sqlSettlementCurrency, [curr[i], rate[i], id, curr[i], month, year,id, curr[i], month, year,]) as CurrencyData[];
+                    const resultCommissionChargesCurrency = await mysqlcon(sqlCommissionChargesCurrency, [curr[i], rate[i],id, curr[i], month, year, id, curr[i], month, year, id, curr[i], month, year, id, curr[i], month, year, id, curr[i], month, year,id, curr[i], month, year,]) as CommissionChargesCurrency[];
+
+                    dbc.push(resultDepositCurrency[0]);
+                    rbc.push(resultRefundCurrency[0]);
+                    cbc.push(resultChargebackCurrency[0]);
+                    pbc.push(resultPayoutCurrency[0]);
+                    sbc.push(resultSettlementCurrency[0]);
+                    ccc.push(resultCommissionChargesCurrency[0]);
+                }
+                const addAmount = add1 + dbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + rbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + cbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + pbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + sbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + ccc.reduce((acc, v) => acc + v.TotalAmount, 0);
+                const EndingBalance = beginningBalance - addAmount;
+                res.status(200).json({
+                    data: {
+                        details: resultDetails,
+                        message: `FINANCIAL STATEMENT FOR ${months} - ${year}`,
+                        BeginningBalance: beginningBalance,
+                        EndingBalance,
+                        deposits: result1,
+                        cac: result4,
+                        dbc,
+                        rbc,
+                        cbc,
+                        pbc,
+                        sbc,
+                        ccc,
+                    },
+                });
+            }else{
+                const sqlDetails = "SELECT name, email, id FROM tbl_user WHERE id = (?)";
+                const resultDetails: ResultDetails[] = await mysqlcon(sqlDetails, [ID]);
+                const sqlDeposit = "SELECT SUM(ammount) as deposit FROM tbl_merchant_transaction WHERE status=1 AND created_on <= ?";
+                const resultDeposite: ResultDeposit[] = await mysqlcon(sqlDeposit, [now_time]);
+                const sqlPayout = "SELECT SUM(amount) as payout FROM tbl_icici_payout_transaction_response_details WHERE status='SUCCESS' AND created_on <= ?";
+                const resultPayout: ResultPayout[] = await mysqlcon(sqlPayout, [now_time]);
+                const sqlSettlement = "SELECT SUM(requestedAmount) as settlement FROM tbl_settlement WHERE status=1 AND created_on <= ?";
+                const resultSettlement: ResultSettlement[] = await mysqlcon(sqlSettlement, [now_time]);
+                
+                const sqlDepositsPayoutSettlement = "SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as depositSum, (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as refundsAmount, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as refundFees, (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as chargebackAmount, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as chargebackFees, 0 as accountFees, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0)+ COALESCE(SUM(our_bank_charge_gst),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as depositCommissions, 0 as anyotherCharges, (SELECT COALESCE(SUM(amount),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as payouts, (SELECT COALESCE(SUM(gst_amount),0)+ COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as payoutCommissions, (SELECT COALESCE(SUM(akonto_charge),0)+ COALESCE(SUM(bank_charges),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as bankaccountCharges,  (SELECT COALESCE(SUM(requestedAmount),0) FROM tbl_settlement WHERE user_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as settlements, (SELECT COALESCE(SUM(totalCharges),0) FROM tbl_settlement WHERE user_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as settlementCharges, (SELECT COALESCE(SUM(settlementAmount),0) FROM tbl_settlement WHERE user_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as netSettlement,0 as anyotherCharges";
+                const result1: ResultDepositsPayoutSettlement[] = await mysqlcon(sqlDepositsPayoutSettlement, [
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                ]);
+                const sqlCommissionCharges = "SELECT x.depositCharge+x.chargebackFee+x.refundFee+x.payoutCharge+x.settlementCharge as commissions ,x.ubankconnectDepositsCharges,x.ubankconnectRefundCharges,x.ubankconnectChargebackCharges,x.ubankconnectPayoutCharges,x.ubankconnectOtherCharges,x.bankCharges,x.tax FROM (SELECT (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?)  AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as depositCharge, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?)  AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as chargebackFee,(SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as refundFee,(SELECT COALESCE(SUM(bank_charges),0)+COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as payoutCharge,(SELECT COALESCE(SUM(charges),0) FROM tbl_settlement WHERE user_id = (?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as settlementCharge,(SELECT COALESCE(SUM(our_bank_charge),0) FROM tbl_merchant_transaction WHERE user_id = (?)  AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectDepositsCharges, (SELECT COALESCE(SUM(our_bank_charge),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectRefundCharges, (SELECT COALESCE(SUM(our_bank_charge),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectChargebackCharges, (SELECT COALESCE(SUM(bank_charges),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as ubankconnectPayoutCharges, 0 as ubankconnectOtherCharges, 0 as bankCharges, 0 as tax) as x";
+                const result4: ResultCommissionCharges[] = await mysqlcon(sqlCommissionCharges, [
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                    ID,
+                    month,
+                    year,
+                ]);
+
+                const beginningBalance = resultDeposite[0].deposit - (resultPayout[0].payout + resultSettlement[0].settlement);
+                const add1 = result1[0].payouts + result1[0].settlements + result4[0].commissions - result1[0].depositSum;
+                const dbc: CurrencyData[] = [];
+                const rbc: CurrencyData[] = [];
+                const cbc: CurrencyData[] = [];
+                const pbc: CurrencyData[] = [];
+                const sbc: CurrencyData[] = [];
+                const ccc: CommissionChargesCurrency[] = [];
+                for (let i = 0; i < curr.length; i++) {
+                    const paramsCommon = [curr[i], rate[i], id, curr[i], month, year];
+                    const sqlDepositCurrency = "SELECT ? as currency, x.Amount, x.charges, x.Amount - x.charges as NetAmount, (x.Amount - x.charges)/(SELECT ? as rate) AS Settlement_Amount FROM ( SELECT (SELECT COALESCE(SUM(ammount), 0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount, (SELECT COALESCE(SUM(tax_amt), 0) + COALESCE(SUM(payin_charges), 0) + COALESCE(SUM(rolling_reverse_amount), 0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges ) as x"; 
+                    const sqlRefundCurrency = "SELECT ? as currency,x.Amount,x.charges,x.Amount-x.charges as NetAmount, (x.Amount - x.charges) /(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount,(SELECT COALESCE(SUM(tax_amt),0)+ COALESCE(SUM(payin_charges),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND status = 4 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlChargebackCurrency = "SELECT ? as currency,x.Amount,x.charges,x.Amount-x.charges as NetAmount, (x.Amount - x.charges) /(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount,(SELECT COALESCE(SUM(tax_amt),0)+ COALESCE(SUM(payin_charges),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND status = 5 AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlPayoutCurrency = "SELECT ? as currency,x.Amount, x.charges,x.Amount-x.charges as NetAmount, (x.Amount-x.charges)/(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(amount),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount,(SELECT COALESCE(SUM(bank_charges),0)+ COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlSettlementCurrency = "SELECT ? as currency,x.Amount,x.charges,x.Amount-x.charges as NetAmount,(x.Amount-x.charges)/(SELECT ? as rate) as Settlement_Amount FROM (SELECT (SELECT COALESCE(SUM(requestedAmount),0) FROM tbl_settlement WHERE user_id = (?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as Amount, (SELECT COALESCE(SUM(charges),0) FROM tbl_settlement WHERE user_id = (?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as charges) as x";
+                    const sqlCommissionChargesCurrency = "SELECT ? as currency,x.DepositAmount,x.DepositCharges,x.PayoutAmount,x.PayoutCharges,x.SettlementAmount,x.SettlementCharges,x.OtherCharges, ((x.DepositAmount-x.DepositCharges)-((x.PayoutAmount-x.PayoutCharges)+(x.SettlementAmount-x.SettlementCharges)))/(SELECT ? as rate) as TotalAmount FROM (SELECT (SELECT COALESCE(SUM(ammount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as DepositAmount, (SELECT COALESCE(SUM(tax_amt),0)+COALESCE(SUM(payin_charges),0)+COALESCE(SUM(our_bank_charge),0)+ COALESCE(SUM(rolling_reverse_amount),0) FROM tbl_merchant_transaction WHERE user_id = (?) AND ammount_type = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as DepositCharges, (SELECT COALESCE(SUM(amount),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as PayoutAmount, (SELECT COALESCE(SUM(bank_charges),0)+COALESCE(SUM(akonto_charge),0) FROM tbl_icici_payout_transaction_response_details WHERE users_id IN(?) AND currency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as PayoutCharges, (SELECT COALESCE(SUM(requestedAmount),0) FROM tbl_settlement WHERE user_id = (?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as SettlementAmount, (SELECT COALESCE(SUM(charges),0) FROM tbl_settlement WHERE user_id = (?) AND fromCurrency = ? AND MONTH(created_on) = ? AND YEAR(created_on) = ?) as SettlementCharges, 0 as OtherCharges) as x";
+                    const resultDepositCurrency = await mysqlcon(sqlDepositCurrency, [...paramsCommon,ID, curr[i], month, year,]) as CurrencyData[];
+                    const resultRefundCurrency = await mysqlcon(sqlRefundCurrency, [...paramsCommon,ID, curr[i], month, year,ID, curr[i], month, year,]) as CurrencyData[];
+                    const resultChargebackCurrency = await mysqlcon(sqlChargebackCurrency, [...paramsCommon,ID, curr[i], month, year, ID, curr[i], month, year,]) as CurrencyData[];
+                    const resultPayoutCurrency = await mysqlcon(sqlPayoutCurrency, [curr[i], rate[i],ID, curr[i], month, year, ID, curr[i], month, year,]) as CurrencyData[];
+                    const resultSettlementCurrency = await mysqlcon(sqlSettlementCurrency, [curr[i], rate[i], ID, curr[i], month, year,ID, curr[i], month, year,]) as CurrencyData[];
+                    const resultCommissionChargesCurrency = await mysqlcon(sqlCommissionChargesCurrency, [curr[i], rate[i],ID, curr[i], month, year, ID, curr[i], month, year, ID, curr[i], month, year, ID, curr[i], month, year, ID, curr[i], month, year,id, curr[i], month, year,]) as CommissionChargesCurrency[];
+
+                    dbc.push(resultDepositCurrency[0]);
+                    rbc.push(resultRefundCurrency[0]);
+                    cbc.push(resultChargebackCurrency[0]);
+                    pbc.push(resultPayoutCurrency[0]);
+                    sbc.push(resultSettlementCurrency[0]);
+                    ccc.push(resultCommissionChargesCurrency[0]);
+                }
+                const addAmount = add1 + dbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + rbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + cbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + pbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + sbc.reduce((acc, v) => acc + v.Settlement_Amount, 0) + ccc.reduce((acc, v) => acc + v.TotalAmount, 0);
+                const EndingBalance = beginningBalance - addAmount;
+                res.status(200).json({
+                    data: {
+                        details: resultDetails,
+                        message: `FINANCIAL STATEMENT FOR ${months} - ${year}`,
+                        BeginningBalance: beginningBalance,
+                        EndingBalance,
+                        deposits: result1,
+                        cac: result4,
+                        dbc,
+                        rbc,
+                        cbc,
+                        pbc,
+                        sbc,
+                        ccc,
+                    },
+                });                
+            }
+        } catch (err) {
+            console.log(err);
+            
+         res.status(500).json({ message: 'Error generating statement', error: err });
+        }
     },
 
     merchantStatement: async(req: AuthenticatedRequest, res: Response):Promise<void> => {
@@ -139,3 +520,5 @@ const TransactionStatement = {
         }
     }
 }
+
+export default TransactionStatement

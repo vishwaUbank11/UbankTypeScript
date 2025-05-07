@@ -16,6 +16,8 @@ const refund_1 = __importDefault(require("../ControllerMerchant/refund"));
 const reportsController_1 = __importDefault(require("../ControllerMerchant/reportsController"));
 const settlementController_1 = __importDefault(require("../ControllerMerchant/settlementController"));
 const singlePayout_1 = __importDefault(require("../ControllerMerchant/singlePayout"));
+const statementController_1 = __importDefault(require("../ControllerMerchant/statementController"));
+const subMerchant_1 = __importDefault(require("../ControllerMerchant/subMerchant"));
 const router = express_1.default.Router();
 const uploads = (0, multer_1.default)(); // for parsing multipart/form-data
 router.post('/register', uploads.none(), loginController_1.default.register);
@@ -89,4 +91,11 @@ router.post('/userWallet', uploads.none(), authMiddleware_1.default, settlementC
 router.post('/singlePayoutCurrency', uploads.none(), authMiddleware_1.default, singlePayout_1.default.singlePayoutCurrency);
 router.post('/singlePayoutBankcodes', uploads.none(), authMiddleware_1.default, singlePayout_1.default.singlePayoutBankcodes);
 router.post('/singlePayoutPayment', uploads.none(), authMiddleware_1.default, singlePayout_1.default.singlePayoutPayment);
+//                  👇👇 Statement 👇👇
+router.post('/statement', uploads.none(), authMiddleware_1.default, statementController_1.default.statement);
+router.post('/merchantStatement', uploads.none(), authMiddleware_1.default, statementController_1.default.merchantStatement);
+//                  👇👇 Sub Merchant 👇👇
+router.post('/SubMerchant', uploads.none(), authMiddleware_1.default, subMerchant_1.default.subMerchant);
+router.post('/getIdSubmerchant', uploads.none(), authMiddleware_1.default, subMerchant_1.default.getIdSubmerchant);
+router.post('/createMerchant', uploads.none(), authMiddleware_1.default, subMerchant_1.default.createMerchant);
 exports.default = router;
