@@ -14,6 +14,10 @@ import SettlementTransaction from '../ControllerMerchant/settlementController';
 import singlePayoutTransaction from '../ControllerMerchant/singlePayout';
 import TransactionStatement from '../ControllerMerchant/statementController';
 import SubMerchant from '../ControllerMerchant/subMerchant';
+import MerchantTeam from '../ControllerMerchant/teamsController';
+import EncryptDecrypt from '../ControllerMerchant/encryptionDecryption';
+import TestSandbox from '../ControllerMerchant/TestModule/sandboxDeposits';
+import TestsandboxPayout from '../ControllerMerchant/TestModule/sandboxPayout';
 
 const router = express.Router();
 const uploads = multer(); // for parsing multipart/form-data
@@ -107,9 +111,28 @@ router.post('/SubMerchant',uploads.none(),authMiddleware,SubMerchant.subMerchant
 router.post('/getIdSubmerchant',uploads.none(),authMiddleware,SubMerchant.getIdSubmerchant);
 router.post('/createMerchant',uploads.none(),authMiddleware,SubMerchant.createMerchant);
 
+//                  👇👇 Merchant Team 👇👇
+router.post('/default',uploads.none(),authMiddleware,MerchantTeam.default);
+router.post('/createEmployee',uploads.none(),authMiddleware,MerchantTeam.createEmployee);
+router.post('/getTeamDetails',uploads.none(),authMiddleware,MerchantTeam.getTeamDetails);
+router.post('/createEmployee',uploads.none(),authMiddleware,MerchantTeam.teamEditDetails);
+router.post('/deleteTeam',uploads.none(),authMiddleware,MerchantTeam.deleteTeam);
+router.post('/verifyTeam',uploads.none(),authMiddleware,MerchantTeam.verifyTeam);
+router.post('/getEmployeePermission',uploads.none(),authMiddleware,MerchantTeam.getEmployeePermission);
+router.post('/permissionEmployee',uploads.none(),authMiddleware,MerchantTeam.permissionEmployee);
 
+//                  👇👇 Merchant Team 👇👇
+router.post('/encryptValue',uploads.none(),authMiddleware,EncryptDecrypt.encryptValue);
+router.post('/decryptValue',uploads.none(),authMiddleware,EncryptDecrypt.decryptValue);
 
+//                  👇👇 Sandbox Deposite Team 👇👇
+router.post('/downloadSandboxDepositsapi',uploads.none(),authMiddleware,TestSandbox.downloadSandboxDepositsapi);
+router.post('/statusSandboxDepositsResult',uploads.none(),authMiddleware,TestSandbox.statusSandboxDepositsResult);
+router.post('/searchSandboxDepositsDateFilter',uploads.none(),authMiddleware,TestSandbox.searchSandboxDepositsDateFilter);
 
-
+//                  👇👇 Sandbox Payout Team 👇
+router.post('/downloadSandboxPayoutReport',uploads.none(),authMiddleware,TestsandboxPayout.downloadSandboxPayoutReport);
+router.post('/sandboxPayoutheader',uploads.none(),authMiddleware,TestsandboxPayout.sandboxPayoutheader);
+router.post('/sandboxPayoutsDefault',uploads.none(),authMiddleware,TestsandboxPayout.sandboxPayoutsDefault);
 
 export default router;

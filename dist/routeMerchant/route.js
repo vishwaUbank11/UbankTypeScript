@@ -18,6 +18,10 @@ const settlementController_1 = __importDefault(require("../ControllerMerchant/se
 const singlePayout_1 = __importDefault(require("../ControllerMerchant/singlePayout"));
 const statementController_1 = __importDefault(require("../ControllerMerchant/statementController"));
 const subMerchant_1 = __importDefault(require("../ControllerMerchant/subMerchant"));
+const teamsController_1 = __importDefault(require("../ControllerMerchant/teamsController"));
+const encryptionDecryption_1 = __importDefault(require("../ControllerMerchant/encryptionDecryption"));
+const sandboxDeposits_1 = __importDefault(require("../ControllerMerchant/TestModule/sandboxDeposits"));
+const sandboxPayout_1 = __importDefault(require("../ControllerMerchant/TestModule/sandboxPayout"));
 const router = express_1.default.Router();
 const uploads = (0, multer_1.default)(); // for parsing multipart/form-data
 router.post('/register', uploads.none(), loginController_1.default.register);
@@ -98,4 +102,24 @@ router.post('/merchantStatement', uploads.none(), authMiddleware_1.default, stat
 router.post('/SubMerchant', uploads.none(), authMiddleware_1.default, subMerchant_1.default.subMerchant);
 router.post('/getIdSubmerchant', uploads.none(), authMiddleware_1.default, subMerchant_1.default.getIdSubmerchant);
 router.post('/createMerchant', uploads.none(), authMiddleware_1.default, subMerchant_1.default.createMerchant);
+//                  👇👇 Merchant Team 👇👇
+router.post('/default', uploads.none(), authMiddleware_1.default, teamsController_1.default.default);
+router.post('/createEmployee', uploads.none(), authMiddleware_1.default, teamsController_1.default.createEmployee);
+router.post('/getTeamDetails', uploads.none(), authMiddleware_1.default, teamsController_1.default.getTeamDetails);
+router.post('/createEmployee', uploads.none(), authMiddleware_1.default, teamsController_1.default.teamEditDetails);
+router.post('/deleteTeam', uploads.none(), authMiddleware_1.default, teamsController_1.default.deleteTeam);
+router.post('/verifyTeam', uploads.none(), authMiddleware_1.default, teamsController_1.default.verifyTeam);
+router.post('/getEmployeePermission', uploads.none(), authMiddleware_1.default, teamsController_1.default.getEmployeePermission);
+router.post('/permissionEmployee', uploads.none(), authMiddleware_1.default, teamsController_1.default.permissionEmployee);
+//                  👇👇 Merchant Team 👇👇
+router.post('/encryptValue', uploads.none(), authMiddleware_1.default, encryptionDecryption_1.default.encryptValue);
+router.post('/decryptValue', uploads.none(), authMiddleware_1.default, encryptionDecryption_1.default.decryptValue);
+//                  👇👇 Sandbox Deposite Team 👇👇
+router.post('/downloadSandboxDepositsapi', uploads.none(), authMiddleware_1.default, sandboxDeposits_1.default.downloadSandboxDepositsapi);
+router.post('/statusSandboxDepositsResult', uploads.none(), authMiddleware_1.default, sandboxDeposits_1.default.statusSandboxDepositsResult);
+router.post('/searchSandboxDepositsDateFilter', uploads.none(), authMiddleware_1.default, sandboxDeposits_1.default.searchSandboxDepositsDateFilter);
+//                  👇👇 Sandbox Payout Team 👇
+router.post('/downloadSandboxPayoutReport', uploads.none(), authMiddleware_1.default, sandboxPayout_1.default.downloadSandboxPayoutReport);
+router.post('/sandboxPayoutheader', uploads.none(), authMiddleware_1.default, sandboxPayout_1.default.sandboxPayoutheader);
+router.post('/sandboxPayoutsDefault', uploads.none(), authMiddleware_1.default, sandboxPayout_1.default.sandboxPayoutsDefault);
 exports.default = router;
